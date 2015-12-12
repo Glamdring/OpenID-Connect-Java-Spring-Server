@@ -11,3 +11,5 @@ bin
 /target
 .springBeans
 nb-configuration.xml
+openid-connect-common/ks.txt
+openid-connect-common/ks_badJWK.txt
