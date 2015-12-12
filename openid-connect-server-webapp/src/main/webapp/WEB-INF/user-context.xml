@@ -49,6 +49,7 @@
 			<security:frame-options policy="DENY" />
 		</security:headers>
 		<security:csrf />
+		<security:x509 subject-principal-regex="CN=(.*?)," user-service-ref="userService"/>
 	</security:http>	
 
 </beans>
