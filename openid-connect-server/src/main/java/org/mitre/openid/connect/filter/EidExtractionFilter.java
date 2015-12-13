@@ -16,7 +16,10 @@
  *******************************************************************************/
 package org.mitre.openid.connect.filter;
 
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
+import java.security.cert.CertificateException;
+import java.security.cert.CertificateFactory;
 import java.security.cert.X509Certificate;
 
 import javax.naming.InvalidNameException;
@@ -27,6 +30,7 @@ import javax.servlet.ServletException;
 import javax.servlet.ServletRequest;
 import javax.servlet.ServletResponse;
 import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
 
 import org.mitre.oauth2.service.ClientDetailsEntityService;
 import org.slf4j.Logger;
@@ -52,13 +56,23 @@ public class EidExtractionFilter extends GenericFilterBean {
 	private ClientDetailsEntityService clientService;
 
 	//@Value("") TODO
-	private boolean isBehindLoadBalancer = false;
+	private boolean isBehindLoadBalancer = true;
+
+	private CertificateFactory certificateFactory;
 	
+	public EidExtractionFilter() {
+	    try {
+            certificateFactory = CertificateFactory.getInstance("X.509");
+        } catch (CertificateException e) {
+            throw new IllegalStateException(e);
+        }
+    }
 	@Override
 	public void doFilter(ServletRequest req, ServletResponse res, FilterChain chain) throws IOException, ServletException {
 
 		HttpServletRequest request = (HttpServletRequest) req;
-
+		HttpServletResponse response = (HttpServletResponse) res;
+		
 		// skip everything that's not an authorize URL
 		if (!request.getServletPath().startsWith("/authorize")) {
 			chain.doFilter(req, res);
@@ -68,13 +82,28 @@ public class EidExtractionFilter extends GenericFilterBean {
 		X509Certificate userCertificate = null;
 		
 		if (isBehindLoadBalancer) {
-		    String certificateHeader = request.getHeader("X-Request-Certificate");
-		    //TODO deserialize into a cert object
-		    // https://serverfault.com/questions/622855/nginx-proxy-to-back-end-with-ssl-client-certificate-authentication
+		    String certificateHeader = request.getHeader("X-Request-Certificate"); // see https://serverfault.com/questions/622855/nginx-proxy-to-back-end-with-ssl-client-certificate-authentication
+		    if (certificateHeader == null) {
+		        response.sendError(HttpServletResponse.SC_UNAUTHORIZED);
+		        return;
+		    }
+		    // the load balancer (e.g. nginx) forwards the certificate into a header by replacing new lines with whitespaces (2 or more)
+		    // also replace tabs, which sometimes nginx may send instead of whitespaces
+		    String certificateContent = certificateHeader.replaceAll("\\s{2,}", System.lineSeparator()).replaceAll("\\t+", System.lineSeparator());
+	        try {
+                userCertificate = (X509Certificate) certificateFactory.generateCertificate(new ByteArrayInputStream(certificateContent.getBytes("ISO-8859-11")));
+            } catch (CertificateException e) {
+                logger.error("Failed to parse certificate: " + certificateContent, e);
+                response.sendError(HttpServletResponse.SC_UNAUTHORIZED);
+                return;
+            }
 		} else {
     		X509Certificate certs[] = (X509Certificate[]) request.getAttribute("javax.servlet.request.X509Certificate");
     		if (certs != null && certs.length > 0) {
     		    userCertificate = certs[0];
+    		} else {
+    		    response.sendError(HttpServletResponse.SC_UNAUTHORIZED);
+                return;
     		}
 		}
 		
@@ -88,7 +117,9 @@ public class EidExtractionFilter extends GenericFilterBean {
                 }
             }
         } catch (InvalidNameException e) {
-            throw new RuntimeException(e);
+            logger.error("Failed to parse certificate CN", e);
+            response.sendError(HttpServletResponse.SC_UNAUTHORIZED);
+            return;
         }
 		
 		logger.info("EID extracted: " + eid);
