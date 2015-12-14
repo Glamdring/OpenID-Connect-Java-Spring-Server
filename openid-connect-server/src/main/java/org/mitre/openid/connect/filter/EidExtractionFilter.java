@@ -126,7 +126,7 @@ public class EidExtractionFilter extends GenericFilterBean {
 		
 		logger.info("EID extracted: " + eid);
 
-		EidAuthenticationToken authRequest = new EidAuthenticationToken(eid, Sets.newHashSet(new SimpleGrantedAuthority("ROLE_USER")));
+		EidAuthenticationToken authRequest = new EidAuthenticationToken(eid, userCertificate, Sets.newHashSet(new SimpleGrantedAuthority("ROLE_USER")));
 		Authentication user = authenticaitonManager.authenticate(authRequest);
 		SecurityContextHolder.getContext().setAuthentication(user);
 	}
