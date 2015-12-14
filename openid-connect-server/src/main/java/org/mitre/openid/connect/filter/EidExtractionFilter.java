@@ -32,19 +32,21 @@ import javax.servlet.ServletResponse;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 
-import org.mitre.oauth2.service.ClientDetailsEntityService;
+import org.mitre.openid.connect.eid.EidAuthenticationToken;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.security.web.authentication.preauth.x509.SubjectDnX509PrincipalExtractor;
-import org.springframework.stereotype.Component;
+import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.filter.GenericFilterBean;
+
+import com.google.common.collect.Sets;
 
 /**
  * @author bozho
  *
  */
-@Component
 public class EidExtractionFilter extends GenericFilterBean {
 
 	/**
@@ -52,15 +54,15 @@ public class EidExtractionFilter extends GenericFilterBean {
 	 */
 	private static final Logger logger = LoggerFactory.getLogger(EidExtractionFilter.class);
 
-	@Autowired
-	private ClientDetailsEntityService clientService;
-
 	//@Value("") TODO
 	private boolean isBehindLoadBalancer = true;
 
 	private CertificateFactory certificateFactory;
+
+	private AuthenticationManager authenticaitonManager;
 	
-	public EidExtractionFilter() {
+	public EidExtractionFilter(AuthenticationManager authenticationManager) {
+	    this.authenticaitonManager = authenticationManager;
 	    try {
             certificateFactory = CertificateFactory.getInstance("X.509");
         } catch (CertificateException e) {
@@ -123,6 +125,9 @@ public class EidExtractionFilter extends GenericFilterBean {
         }
 		
 		logger.info("EID extracted: " + eid);
-		request.setAttribute("EID", eid);
+
+		EidAuthenticationToken authRequest = new EidAuthenticationToken(eid, Sets.newHashSet(new SimpleGrantedAuthority("ROLE_USER")));
+		Authentication user = authenticaitonManager.authenticate(authRequest);
+		SecurityContextHolder.getContext().setAuthentication(user);
 	}
 }

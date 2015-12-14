@@ -14,7 +14,7 @@ public class CitizenService implements UserDetailsService {
 
     @Override
     public UserDetails loadUserByUsername(String eid) throws UsernameNotFoundException {
-        System.out.println(eid);
+        System.out.println("Loading user by eid: " + eid);
         boolean expired = false;
         return new User(eid, "p", true, !expired, !expired, !expired, Sets.newHashSet(new SimpleGrantedAuthority("ROLE_USER")));
     }
