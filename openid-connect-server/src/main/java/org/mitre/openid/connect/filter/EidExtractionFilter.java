@@ -49,68 +49,68 @@ import com.google.common.collect.Sets;
  */
 public class EidExtractionFilter extends GenericFilterBean {
 
-	/**
-	 * Logger for this class
-	 */
-	private static final Logger logger = LoggerFactory.getLogger(EidExtractionFilter.class);
+    /**
+     * Logger for this class
+     */
+    private static final Logger logger = LoggerFactory.getLogger(EidExtractionFilter.class);
 
-	//@Value("") TODO
-	private boolean isBehindLoadBalancer = true;
+    //@Value("") TODO
+    private boolean isBehindLoadBalancer = true;
 
-	private CertificateFactory certificateFactory;
+    private CertificateFactory certificateFactory;
 
-	private AuthenticationManager authenticaitonManager;
-	
-	public EidExtractionFilter(AuthenticationManager authenticationManager) {
-	    this.authenticaitonManager = authenticationManager;
-	    try {
+    private AuthenticationManager authenticaitonManager;
+    
+    public EidExtractionFilter(AuthenticationManager authenticationManager) {
+        this.authenticaitonManager = authenticationManager;
+        try {
             certificateFactory = CertificateFactory.getInstance("X.509");
         } catch (CertificateException e) {
             throw new IllegalStateException(e);
         }
     }
-	@Override
-	public void doFilter(ServletRequest req, ServletResponse res, FilterChain chain) throws IOException, ServletException {
+    @Override
+    public void doFilter(ServletRequest req, ServletResponse res, FilterChain chain) throws IOException, ServletException {
 
-		HttpServletRequest request = (HttpServletRequest) req;
-		HttpServletResponse response = (HttpServletResponse) res;
-		
-		// skip everything that's not an authorize URL
-		if (!request.getServletPath().startsWith("/authorize")) {
-			chain.doFilter(req, res);
-			return;
-		}
+        HttpServletRequest request = (HttpServletRequest) req;
+        HttpServletResponse response = (HttpServletResponse) res;
+        
+        // skip everything that's not an authorize URL
+        if (!request.getServletPath().startsWith("/authorize")) {
+            chain.doFilter(req, res);
+            return;
+        }
 
-		X509Certificate userCertificate = null;
-		
-		if (isBehindLoadBalancer) {
-		    String certificateHeader = request.getHeader("X-Request-Certificate"); // see https://serverfault.com/questions/622855/nginx-proxy-to-back-end-with-ssl-client-certificate-authentication
-		    if (certificateHeader == null) {
-		        response.sendError(HttpServletResponse.SC_UNAUTHORIZED);
-		        return;
-		    }
-		    // the load balancer (e.g. nginx) forwards the certificate into a header by replacing new lines with whitespaces (2 or more)
-		    // also replace tabs, which sometimes nginx may send instead of whitespaces
-		    String certificateContent = certificateHeader.replaceAll("\\s{2,}", System.lineSeparator()).replaceAll("\\t+", System.lineSeparator());
-	        try {
+        X509Certificate userCertificate = null;
+        
+        if (isBehindLoadBalancer) {
+            String certificateHeader = request.getHeader("X-Request-Certificate"); // see https://serverfault.com/questions/622855/nginx-proxy-to-back-end-with-ssl-client-certificate-authentication
+            if (certificateHeader == null) {
+                response.sendError(HttpServletResponse.SC_UNAUTHORIZED);
+                return;
+            }
+            // the load balancer (e.g. nginx) forwards the certificate into a header by replacing new lines with whitespaces (2 or more)
+            // also replace tabs, which sometimes nginx may send instead of whitespaces
+            String certificateContent = certificateHeader.replaceAll("\\s{2,}", System.lineSeparator()).replaceAll("\\t+", System.lineSeparator());
+            try {
                 userCertificate = (X509Certificate) certificateFactory.generateCertificate(new ByteArrayInputStream(certificateContent.getBytes("ISO-8859-11")));
             } catch (CertificateException e) {
                 logger.error("Failed to parse certificate: " + certificateContent, e);
                 response.sendError(HttpServletResponse.SC_UNAUTHORIZED);
                 return;
             }
-		} else {
-    		X509Certificate certs[] = (X509Certificate[]) request.getAttribute("javax.servlet.request.X509Certificate");
-    		if (certs != null && certs.length > 0) {
-    		    userCertificate = certs[0];
-    		} else {
-    		    response.sendError(HttpServletResponse.SC_UNAUTHORIZED);
+        } else {
+            X509Certificate certs[] = (X509Certificate[]) request.getAttribute("javax.servlet.request.X509Certificate");
+            if (certs != null && certs.length > 0) {
+                userCertificate = certs[0];
+            } else {
+                response.sendError(HttpServletResponse.SC_UNAUTHORIZED);
                 return;
-    		}
-		}
-		
-		String eid = null;
-		String dn = userCertificate.getSubjectDN().getName();
+            }
+        }
+        
+        String eid = null;
+        String dn = userCertificate.getSubjectDN().getName();
         try {
             LdapName ldapDN = new LdapName(dn);
             for (Rdn rdn : ldapDN.getRdns()) {
@@ -123,11 +123,11 @@ public class EidExtractionFilter extends GenericFilterBean {
             response.sendError(HttpServletResponse.SC_UNAUTHORIZED);
             return;
         }
-		
-		logger.info("EID extracted: " + eid);
+        
+        logger.info("EID extracted: " + eid);
 
-		EidAuthenticationToken authRequest = new EidAuthenticationToken(eid, userCertificate, Sets.newHashSet(new SimpleGrantedAuthority("ROLE_USER")));
-		Authentication user = authenticaitonManager.authenticate(authRequest);
-		SecurityContextHolder.getContext().setAuthentication(user);
-	}
+        EidAuthenticationToken authRequest = new EidAuthenticationToken(eid, userCertificate, Sets.newHashSet(new SimpleGrantedAuthority("ROLE_USER")));
+        Authentication user = authenticaitonManager.authenticate(authRequest);
+        SecurityContextHolder.getContext().setAuthentication(user);
+    }
 }
