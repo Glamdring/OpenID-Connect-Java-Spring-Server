@@ -21,7 +21,7 @@ public class EidAuthenticationToken extends AbstractAuthenticationToken {
     
     @Override
     public Object getCredentials() {
-        return eid;
+        return certificate;
     }
 
     @Override
