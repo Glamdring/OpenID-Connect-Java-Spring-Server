@@ -1,3 +1,5 @@
+These are certificates and keypairs used only for testing.
+
 The JKS contains:
 - the root certificate of the CA
 - the keypair of the verifier service
